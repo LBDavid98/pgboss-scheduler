@@ -1,0 +1,48 @@
+{
+  "name": "pgboss-scheduler",
+
+  // Node/TypeScript reference devcontainer — see <deploy path>/.devcontainer
+  // for the Node reference this is adapted from, and
+  // <deploy path>/.devcontainer for the Python one. This one exercises
+  // a real build step (tsc) that hello's static shape doesn't.
+
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:22",
+
+  // code-server runs INSIDE the devcontainer, so the browser IDE has the
+  // same toolchain the app actually builds with.
+  //
+  // 2026-09-02: NOT the ghcr.io/devcontainers-extra/features/code-server
+  // Feature this used to be -- that package is gone (GitHub's package API
+  // returns 404, confirmed with an authenticated request too, so it's a real
+  // deletion, not a rate limit). See hello's devcontainer.json for the fix
+  // this was copied from, and why postStartCommand rather than
+  // postCreateCommand.
+  "postCreateCommand": "curl -fsSL https://code-server.dev/install.sh | sh && npm install --no-audit --no-fund && npm run typecheck",
+  "postStartCommand": "nohup code-server --bind-addr 0.0.0.0:8443 > /tmp/code-server.log 2>&1 &",
+
+  // Joins the shared edge network so the reverse proxy can reach it by name —
+  // same rule as every app here, no published ports. Deliberately NOT also
+  // joined to backend: this container is for editing and building the
+  // code, not running it against the shared Postgres. `npm run
+  // test:integration` spins up its own throwaway Postgres per this repo's
+  // CLAUDE.md ("never point them at your fleet's Postgres") — running that
+  // inside this devcontainer needs Docker access it doesn't have yet, so for
+  // now `npm run typecheck` and `npm run build` are what a workspace here is
+  // good for. Add docker-in-docker later if full `npm test` inside the
+  // workspace turns out to matter.
+  "runArgs": ["--network=frontend"],
+
+  "customizations": {
+    "vscode": {
+      "extensions": ["dbaeumer.vscode-eslint", "esbenp.prettier-vscode"]
+    }
+  },
+
+  // A real smoke test, not just a version print — proves the TypeScript
+  // toolchain and dependencies actually resolve before anyone starts editing.
+  "postCreateCommand": "npm install --no-audit --no-fund && npm run typecheck",
+
+  // Non-root. The container can still write the worktree because the host
+  // directory is owned by app-ops (uid 1000), which is what node maps to.
+  "remoteUser": "node"
+}

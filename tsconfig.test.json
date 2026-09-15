@@ -1,0 +1,14 @@
+{
+  // Tests are COMPILED rather than run through --experimental-strip-types: the
+  // Node build on your fleet is not compiled with TypeScript support, so type
+  // stripping fails with ERR_NO_TYPESCRIPT. Compiling is also what the runtime
+  // image does, so the tests exercise the same output that ships.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "dist-test",
+    "rootDir": ".",
+    "sourceMap": true,
+    "noEmit": false
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}

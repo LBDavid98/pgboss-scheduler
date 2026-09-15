@@ -1,0 +1,76 @@
+# pgboss-scheduler — scheduled and queued work behind an HTTP API.
+#
+#   cp .env.example .env    # DATABASE_URL, SCHEDULER_TOKENS, SCHEDULER_SIGNING_KEY
+#   docker compose up -d
+#   curl -s localhost:8020/healthz
+#
+# Self-contained: it brings its own Postgres. If you already run one, delete the
+# `postgres` service and point DATABASE_URL at yours.
+
+name: pgboss-scheduler
+
+services:
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: pgboss-scheduler:local
+    restart: unless-stopped
+    mem_limit: 512m
+    mem_reservation: 64m
+    security_opt:
+      - no-new-privileges:true
+
+    env_file:
+      # 0600, gitignored, and excluded from the build context by .dockerignore.
+      # `required: false` so a fresh checkout with no .env still comes up far
+      # enough to say what is missing, rather than failing in Compose before the
+      # process can explain itself.
+      - path: .env
+        required: false
+
+    environment:
+      PORT: "8020"
+      # TZ sets the container's WALL CLOCK only, and on alpine without tzdata it
+      # does not even do that.
+      #
+      # SCHEDULE CORRECTNESS DOES NOT DEPEND ON IT. pg-boss resolves a schedule's
+      # `tz` through cron-parser and Intl, and Node 22 ships full ICU, so
+      # `0 8 * * *` with tz America/New_York resolves to 12:00Z regardless of
+      # what this says. It is set because a container claiming UTC while the
+      # operator thinks in local time is its own trap.
+      TZ: ${TZ:-UTC}
+
+    ports:
+      # Bound to loopback. This service can enqueue work into anything it can
+      # reach and authenticates callers with bearer tokens only — put it behind
+      # whatever already fronts your other services before changing this.
+      - "127.0.0.1:8020:8020"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    # Healthcheck comes from the image. Overriding it here would mean two
+    # definitions of healthy that can disagree.
+    stop_grace_period: 40s
+
+  postgres:
+    # Digest-pinned: a floating tag means a rebuild months from now silently
+    # ships a different database than the one this was verified against.
+    image: postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-scheduler_app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-scheduler}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-scheduler_app}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:

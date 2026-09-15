@@ -1,0 +1,6 @@
+node_modules/
+dist/
+dist-test/
+# Holds DATABASE_URL, the caller tokens and the signing key. 0600 on your fleet.
+.env
+*.log
